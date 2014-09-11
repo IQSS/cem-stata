@@ -1,0 +1,33 @@
+SUBJECT:    Coarsened Exact Matching in Stata
+
+AUTHOR(S):  Matthew Blackwell
+            Harvard University
+
+            Stefano Iacus
+            University of Milan
+
+            Gary King
+            Harvard University
+
+            Giuseppe Porro
+            University of Trieste
+
+            ...
+
+SUPPORT:    Matthew Blackwell <blackwel@fas.harvard.edu> 
+
+HELP:       After installation, type
+
+
+            . help cem
+            . help imb
+
+FILES:
+
+cem.ado
+imb.ado
+listwise.ado
+cem.sthlp
+imb.sthlp
+listwise.sthlp
+lcem.mlib

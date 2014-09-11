@@ -1,0 +1,1338 @@
+\documentclass[11pt,titlepage]{article}
+%\usepackage[notref]{showkeys}
+\usepackage[reqno]{amsmath}
+\usepackage{natbib}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage[all]{xy}
+\usepackage{verbatim}
+%\usepackage{listings}
+\usepackage{vmargin}
+\setpapersize{USletter}
+\topmargin=0in
+\usepackage{url}
+\usepackage[usenames]{color}
+\usepackage{dcolumn}
+\newcolumntype{.}{D{.}{.}{-1}}
+\newcolumntype{d}[1]{D{.}{.}{#1}}
+\newcommand{\vs}{\vspace{-\baselineskip}}
+\newcommand{\obs}{{\text{obs}}}
+\newcommand{\mis}{{\text{mis}}}
+\newcommand{\cem}{\texttt{cem }}
+
+
+\title{\tt{cem}\sf{: Coarsened Exact Matching in Stata}} \author{Matthew
+  Blackwell\thanks{Institute for Quantitative Social Science,1737
+    Cambridge Street, Harvard University, Cambridge MA 02138;
+    \texttt{blackwel@fas.harvard.edu}).}
+%
+\and %
+%
+Stefano Iacus\thanks{Department of Economics, Business and Statistics,
+  University of Milan, Via Conservatorio 7, I-20124 Milan, Italy; 
+  \texttt{stefano.iacus@unimi.it}.}
+%
+\and %
+%
+Gary King\thanks{Institute for Quantitative Social
+  Science, 1737 Cambridge Street, Harvard University, Cambridge MA
+  02138; \texttt{http://GKing.Harvard.Edu}, \texttt{King@Harvard.Edu},
+  (617) 495-2027).}
+%
+\and %
+%
+Giuseppe Porro\thanks{Department of Economics and Statistics, University of
+  Trieste, P.le Europa 1, I-34127 Trieste, Italy; 
+  \texttt{giuseppe.porro@econ.units.it}.}}
+\title{cem: Coarsened Exact Matching in Stata} 
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+  This paper introduces a Stata implementation of Coarsened Exact
+  Matching (CEM), a new method for improving the estimation of causal
+  effects by reducing imbalance in covariates between treated and
+  control groups.  CEM is faster, easier to use and understand,
+  requires fewer assumptions, more easily automated, and possesses
+  more attractive statistical properties for many applications than
+  existing matching methods.  In CEM, users temporarily coarsen their
+  data, exact match on these coarsened data, then run their analysis
+  on the uncoarsened, matched data.  CEM bounds the degree of model
+  dependence and causal effect estimation error by ex ante user
+  choice, is montonic imbalance bounding (so that reducing the maximum
+  imbalance on one variable has no effect on others), does not require
+  a separate procedure to restrict data to common support, meets the
+  congruence principle, is approximately invariant to measurement
+  error, balances all nonlinearities and interactions in-sample (i.e.,
+  not merely in expectation), and works with multiply imputed data
+  sets.  Other matching methods inheret many of CEM's properties when
+  applied to further match data preprocessed by CEM.  The library
+  \texttt{cem} implements the CEM algorithm in Stata.
+\end{abstract}
+
+
+\section{Introduction}
+
+This program is designed to improve the estimation of causal effects
+via a powerful method of matching that is widely applicable in
+observational data and easy to understand and use (if you understand
+how to draw a histogram, you will understand this method).  The
+program implements the Coarsened Exact Matching (CEM) algorithm
+described in \citep{IacKinPor12}.  CEM is a monotonoic imbalance
+reducing matching method --- which means that the balance between the
+treated and control groups is chosen by ex ante user choice rather
+than discovered through the usual laborious process of checking after
+the fact, tweaking the method, and repeatedly reestimating.  CEM also
+assures that adjusting the imbalance on one variable has no effect on
+the maximum imbalance of any other.  CEM strictly bounds through ex
+ante user choice both the degree of model dependence and the average
+treatment effect estimation error, eliminates the need for a separate
+procedure to restrict data to common empirical support, meets the
+congruence principle, is robust to measurement error, works well with
+multiple imputation methods for missing data, can be completely
+automated, and is extremely fast computationally even with very large
+data sets.  After preprocessing data with CEM, the analyst may then
+use a simple difference in means or whatever statistical model they
+would have applied without matching.  CEM can also be used to improve
+other methods of matching by applying those methods to CEM-matched
+data (they formally inherent CEM's properties if applied within CEM
+strata).  CEM also works well for determining blocks in randomized
+experiments, and evaluating extreme counterfactuals.
+
+\section{Background}
+
+\subsection{Notation}
+
+Consider a sample of $n$ units  randomly drawn from a population of $N$
+units, where $n \leq N$.  For unit $i$, denote $T_i$ as an indicator
+variable with value $T_i=1$ if unit $i$ receives the treatment (and so
+is a member of the ``treated'' group) and $T_i=0$ if not (and is
+therefore a member of the ``control'' group).  The outcome variable is
+denoted $Y$, where $Y_i(0)$ is the potential outcome for observation
+$i$ if the unit does not receive treatment and $Y_i(1)$ is the
+potential outcome if the (same) unit receives treatment.  For each
+observed unit, the observed outcome is $Y_i = T_i Y_i(1) + (1-T_i)
+Y_i(0)$ and so $Y_i(0)$ is unobserved if $i$ receives treatment and
+$Y_i(1)$ is unobserved if $i$ does not receive treatment.
+
+To compensate for the observational data problem where the treated and
+control groups are not necessarily identical before treatment (and,
+lacking random assignment, not the same on average), matching
+estimators attempt to control for pre-treatment covariates.  For this
+purpose, we denote $X=(X_1, X_2, \ldots, X_k)$ as a $k$-dimensional
+data set, where each $X_j$ is a column vector of  observed
+values of pre-treatment variable $j$ for the $n$ sample observations
+(possibly drawn from a population, of size $N$).  That is, $X =
+[X_{ij}, i=1, \ldots, n, j=1, \ldots, k]$.
+%$$
+%X = [X_{ij}, i=1, \ldots, n, j=1, \ldots,
+%k]= \left(\begin{array}{cccc}
+%    X_{11} & X_{12} & \cdots & X_{1k} \\
+%    X_{21} & X_{22} & \cdots & X_{2k} \\
+%    \vdots & \vdots & \dots & \vdots \\
+%    X_{n1} & X_{n2} & \cdots & X_{nk}
+%\end{array}\right)
+%$$
+
+\subsection{Quantities of Interest}
+
+As usual, the treatment effect for unit $i$, ${\rm TE}_i = Y_i(1) -
+Y_i(0)$, is unobserved.  All relevant causal quantities of interest
+are functions of $\textrm{TE}_i$, for different groups of units, and
+so must be estimated.  We focus on the sample average treatment effect
+on the treated (SATT):
+\begin{equation} 
+  {\rm SATT} = \frac{1}{n_T} \sum_{i\in T} {\rm TE}_i
+\end{equation}
+where $n_T = \sum_{i=1}^n T_i$ and $T = \{1 \leq i \leq n : T_i=1\}$.
+Matching algorithms sometimes also change the quantity being estimated
+to one that can be estimated without much model dependence by
+selecting control and/or treated units.
+
+We assume that treatment assignment is ignorable conditional on $X$. This
+assumption is often stated as ``no unmeasured confounders'' or ``no
+omitted variables.'' Formally, this means that the treatment assignment is
+independent of the potential outcomes, 
+\begin{equation}
+P(T|X,Y(0),Y(1)) = P(T|X).
+\end{equation}
+
+\subsection{Existing matching methods and practice}
+
+Matching is a nonparametric method of controlling for some or all of
+the confounding influence of pretreatment control variables in
+observational data.  The key goal of matching is to prune observations
+from the data so that the remaining data have better \emph{balance}
+between the treated and control groups, meaning that the empirical
+distributions of the covariates ($X$) in the groups are more similar.
+Exactly balanced data means that controlling further for $X$ is
+unnecessary (since it is unrelated to the treatment variable), and so
+a simple difference in means on the matched data can estimate the
+causal effect; approximately balanced data requires controlling for
+$X$ with a model (such as the same model that would have been used
+without matching), but the only inferences necessary are only those
+relatively close to the data, leading to less model dependence and
+reduced statistical bias than without matching.
+
+The most common matching methods involve finding, for each treated unit,
+at least one control unit that is ``similar'' on the covariates.  The
+distinction between methods is how to define this similarity. For example,
+\emph{exact matching} simply matches a treated unit to all of the control
+units with the same covariate values. Unfortunately, due to the richness
+of covariates in many examples, this method often produces very few
+matches. A whole host of \emph{approximate matching} methods specify a
+metric to find control units that are close to the treated unit. This
+metric is often the Mahalanobis distance or the propensity score (which is
+simply the probability of being treated, conditional on the covariates).
+Many of these related methods are implemented in Stata  \citep{SasIch02,
+  AbaDruHer01, LeuSia04, AbaDiaHai09}.  A problem with this type of solution is
+that it requires the user to set the size of the matching solution ex
+ante, then check for balance ex post. Thus analysts must check for balance
+after the algorithm is finished, then respecify a matching model and
+recheck balance, etc. This process repeats until the user obtains an
+acceptable amount of balance.
+
+As matching is simply a data preprocessing technique, analysts must still
+apply statistical estimators to the data after matching. When one-to-one
+exact matching is used, a simple difference in means between $Y$ in the
+treated and control group provides an estimator of the causal effect. When
+the match is not exact, a parametric model must be used to control for the
+differences in the covariates across treated and control groups. This
+may be a linear regression, a maximum likelihood estimator or some other
+estimator. Applying a matching method to the data before analysis can
+reduce the degree of model dependence \citep{HoImaKin07}. 
+
+One wrinkle in the analysis of matched data occurs when there are not
+equal numbers of treated and control units within strata. In this
+situation, estimators require weighting observations according to the size
+of their strata \citep{IacKinPor12}.
+
+\section{Coarsened Exact Matching} 
+
+\subsection{The Algorithm}
+
+The central motivation for CEM is that while exact matching provides
+perfect balance, it typically produces few matches due to
+curse-of-dimensionality issues. For instance, adding one continuous
+variable to a dataset effectively kills exact matching since two
+observations are unlikely to have identical values on a continuous
+measure. The idea of CEM is to temporarily coarsen each variable into
+substantively meaningful groups, exact match on these coarsened data
+and then only retain the original (uncoarsened) values of the matched
+data.  As coarsening is a process at the heart of measurement, many
+analysts know how to coarsen a variable into groups that preserve
+information. For instance, education may be measured in years, but
+many would be comfortable grouping observations into categories of
+high school, some college, college graduates, etc. This method works
+by exact matching on distilled information in the covariates as chosen
+by the user.
+
+The algorithm works as follows:
+\begin{enumerate}
+\item Begin with the covariates $X$ and make a copy, which we denote
+  $X^*$.
+\item Coarsen $X^*$ according to user-defined cutpoints, or CEM's
+  automatic binning algorithm.
+\item Create one stratum per unique observation of $X^*$ and place each
+  observation in a stratum.
+\item Assign these strata to the original data, $X$ and drop any
+  observation whose stratum does not contain at least one treated and
+  one control unit.
+\end{enumerate}
+
+Once completed, these strata are the foundations for calculating the
+treatment effect.  The inherent trade-off of matching is reflected in
+CEM too: larger bins (more coarsening) used to make $X^*$ will result
+in fewer strata. Fewer strata will result in more diverse observations
+within the same strata and, thus, higher imbalance.
+
+It is important to note that CEM prunes both treated and control
+units.  This process changes the quantity of interest under study to
+the treatment effect in the post-matching subsample. This change is
+reasonable so long as the decision is transparent (see e.g.
+\citet{CruHotImb06}).
+
+\subsection{The Benefits}
+\citet{IacKinPor12} derive many of the properties of the CEM algorithm and
+we review some of them here. The key property of CEM is that it is in a
+class of matching methods called Monotonic Imbalance Bounding (MIB). MIB
+methods bound the maximum imbalance in some feature of the empirical
+distributions through an \emph{ex ante} choice by the user. In CEM, this
+ex ante choice is the coarsening. As the coarsening on any variable
+becomes finer (the bins become more narrow), the bound on the maximum
+imbalance on the moments of that variable becomes tighter. This is also
+true for the bound on differences in the empirical quantiles.
+Furthermore, this choice also bounds the maximum imbalance on the full
+multivariate histogram of treated and control units, which includes all
+interactions and non-linearities. By choosing the coarsening ex ante,
+users can control the amount of imbalance in the matching solution.
+\citet{IacKinPor12} also show that CEM bounds both the error in estimating the
+average treatment effect and the amount of model dependence.
+
+Aside from bounding the imbalance between the treated and control groups,
+CEM has a number of other beneficial properties. First, CEM meets the
+\emph{congruence principle}, which states that the data space and analysis
+space should be the same. Methods that fail to meet this principle often
+produce strange or counter-intuitive results. Methods that meet the
+principle allow analysts to leverage their substantive knowledge of the
+data in order to find better matches. Second, CEM automatically restricts
+the matched data to areas of common empirical support. This is necessary to
+remove the possibility of difficult-to-justify extrapolations of the
+causal effect that end up being heavily model dependent
+\citep{KinZen06}. Finally, CEM is computationally very efficient even
+for large data sets.
+
+\section{An Extended Example}
+We show here how to use CEM\footnote{In addition to the Stata version
+  of CEM, there is an R version in the package \texttt{cem}. The
+  example presented here is also used in that package as a vignette,
+  and includes some obvious overlap in prose.} through a simple
+running example: the National Supported Work (NSW) Demonstration data,
+also known as the Lalonde data set \citep{Lalonde86}.  This program
+provided training to selected individuals for 12-18 months and help
+finding a job in the hopes of increasing their earnings.  The
+treatment variable, \texttt{treated}, is 1 for participants (the
+treatment group) and 0 for nonparticipants (the control group).  The
+key outcome variable is earnings in 1978 (\texttt{re78}).  The
+statistical goal is to estimate a specific version of a causal effect:
+the sample average treatment effect on the treated (the ``SATT'').
+
+Since participation in the program was not assigned strictly at random, we
+must control for a set of pretreatment variables by the CEM algorithm.
+These pre-treatment variables include age (\texttt{age}), years of
+education (\texttt{education}), marital status (\texttt{married}), lack of
+a high school diploma (\texttt{nodegree}), race (\texttt{black},
+\texttt{hispanic}), indicator variables for unemployment in 1974
+(\texttt{u74}) and 1975 (\texttt{u75}), and real earnings in 1974
+(\texttt{re74}) and 1975 (\texttt{re75}).  Some of these are dichotomous
+(\texttt{married}, \texttt{nodegree}, \texttt{black}, \texttt{hispanic},
+\texttt{u74}, \texttt{u75}), some are categorical (\texttt{age} and
+\texttt{education}), and the earnings variables are continuous and highly
+skewed with point masses at zero. You can load this data into Stata using
+the command
+
+\begin{verbatim}
+use http://gking.harvard.edu/cem/lalonde.dta, clear
+\end{verbatim}
+
+Matching is not a method of estimation; it is a way to preprocess a
+data set so that estimation of SATT based on the matched data set will
+be less ``model-dependent'' (i.e., less a function of apparently small
+and indefensible modeling decisions) than when based on the original
+full data set.  Matching involves pruning observations that have no
+close matches on pre-treatment covariates in both the treated and
+control groups.  The result is typically less model-dependence, lower bias,
+and (by removing heterogeneity) increased efficiency
+\citep{KinZen06,HoImaKin07,IacKinPor12}.
+
+\subsection{Basic Evaluation and Analysis of Unmatched Data}\label{s:basic}
+
+We begin the simple difference in means as a naive estimate of SATT;
+this estimator is useful only when the in-sample distribution of
+pre-treatment covariates happens to be the same in the treatment and
+control groups. First we compute the size of the treated and control
+groups:
+
+\begin{verbatim}
+. table treated
+
+----------------------
+  treated |      Freq.
+----------+-----------
+        0 |        425
+        1 |        297
+----------------------
+
+\end{verbatim}
+
+
+Thus, the data include 297 treated units and 425 control units.  The
+(unadjusted and therefore likely biased) difference in means can be found
+by a simple linear regression of outcome on treatment,
+
+\begin{verbatim}
+
+. regress re78 treated
+
+      Source |       SS       df       MS              Number of obs =     722
+-------------+------------------------------           F(  1,   720) =    3.52
+       Model |   137332528     1   137332528           Prob > F      =  0.0609
+    Residual |  2.8053e+10   720  38962865.4           R-squared     =  0.0049
+-------------+------------------------------           Adj R-squared =  0.0035
+       Total |  2.8191e+10   721  39099300.5           Root MSE      =    6242
+
+------------------------------------------------------------------------------
+        re78 |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+     treated |   886.3038   472.0863     1.88   0.061    -40.52625    1813.134
+       _cons |   5090.048   302.7826    16.81   0.000     4495.606    5684.491
+------------------------------------------------------------------------------
+
+\end{verbatim}
+
+
+Thus, our estimate of SATT is 886.3. Because the variable \texttt{treated} was
+not randomly assigned, the pre-treatment covariates differ between the
+treated and control groups.  To see this, we focus on these pre-treatment
+covariates: \texttt{age}, \texttt{education}, \texttt{black},
+\texttt{nodegree}, \texttt{re74}.
+
+The overall imbalance is given by the $\mathcal L_1$ statistic,
+introduced in \citet{IacKinPor12} as a comprehensive measure of global
+imbalance.  It is based on the $L_1$ difference between the
+multidimensional histogram of all pretreatment covariates in the
+treated group and that in the control group.  First, we coarsen the
+covariates into bins. To use this measure, we require a list of bin
+sizes for the numerical variables.  Our functions compute these
+automatically, or they can be set by the user.\footnote{Of course, as
+  with drawing histograms, the choice of bins affects the final
+  result.  The crucial point is to choose one and keep it the same
+  throughout to allow for fair comparisons.  The particular choice is
+  less crucial.}  Then, we cross-tabulate the discretized variables as
+$X_1\times \dots \times X_k$ for the treated and control groups
+separately, and record the $k$-dimensional relative frequencies for
+the treated $f_{\ell_1\cdots \ell_k}$ and control $g_{\ell_1\cdots
+  \ell_k}$ units.  Finally, our measure of imbalance is the absolute
+difference over all the cell values:
+\begin{equation}
+  \mathcal L_1(f,g) = \frac12 \sum_{\ell_1  \cdots \ell_k} 
+  |f_{\ell_1\cdots \ell_k} - g_{\ell_1\cdots \ell_k}|
+  \label{eq:L1}
+\end{equation}
+
+Perfect global balance (up to coarsening) is indicated by $\mathcal
+L_1=0$, and larger values indicate larger imbalance between the
+groups, with a maximum of $\mathcal L_1=1$, which indicates complete
+separation. If we denote the relative frequencies of a matched dataset
+by $f^m$ and $g^m$, then a good matching solution would produce a
+reduction in the $\mathcal L_1$ statistic; that is, we would hope to
+have $\mathcal L_1(f^m, g^m) \leq \mathcal L_1(f,g)$.
+
+We compute $\mathcal L_1$ statistic, as well as several unidimensional
+measures of imbalance via our \texttt{imb} function.  In our
+running example:
+
+\begin{verbatim}
+. imb age education black nodegree re74, treatment(treated)
+
+Multivariate L1 distance: .50759358
+
+Univariate imbalance:
+
+                L1     mean      min      25%      50%      75%      max
+      age   .10119    .1792        0        1        0       -1       -6
+education   .10047   .19224        1        0        1        1        2
+    black   .00135   .00135        0        0        0        0        0
+ nodegree   .08348  -.08348        0       -1        0        0        0
+     re74    .0522  -101.49        0        0   69.731   584.92    -2139
+
+\end{verbatim}
+
+Only the overall $\mathcal L_1$ statistic measure includes imbalance with
+respect to the full joint distribution, including all interactions, of the
+covariates; in the case of our example, $\mathcal L_1=.5076$. The
+$\mathcal L_1$ value is not valuable on its own, but rather as a point of
+comparison between matching solutions. The value .5076 is a baseline
+reference for the unmatched data. Once we have a matching solution, we
+will compare its $\mathcal L_1$ value to .5076 and gauge the increase in
+balance due to the matching solution from that difference. Thus, $\mathcal
+L_1$ works for imbalance as $R^2$ works for model fit: the absolute values
+mean less than comparisons between matching solutions. The unidimensional
+measures in the table are all computed for each variable separately.
+
+The first column, labeled \texttt{L1}, reports the $\mathcal L_1^j$
+measure, which is $\mathcal L_1$ computed for the $j$-th variable
+separately (which of course does not include interactions).  The second
+column in the table of unidimensional measures, labeled \texttt{mean},
+reports the difference in means.  The remaining columns in the table
+report the difference in the empirical quantiles of the distributions of
+the two groups for the 0th (min), 25th, 50th, 75th, and 100th (max)
+percentiles for each variable. 
+
+This particular table shows that variables \texttt{re74} is imbalanced in
+the raw data in many ways and variable \texttt{age} is balanced in means
+but not in the quantiles of the two distributions.  This table also
+illustrates the point that balancing only the means between the treated
+and control groups does not necessarily guarantee balance in the rest of
+the distribution.  Most important, of course, is the overall $\mathcal
+L_1$ measure, since even if the marginal distribution of every variable is
+perfectly balanced, the joint distribution can still be highly imbalanced.
+
+\subsection{Coarsened Exact Matching}\label{sec:cem}
+
+We now apply the coarsened exact matching algorithm by calling the
+function \texttt{cem}.  The CEM algorithm performs exact matching on
+coarsened data to determine matches and then passes on the uncoarsened
+data from observations that were matched to estimate the causal
+effect.  Exact matching works by first sorting all the observations
+into strata, each of which has identical values for all the coarsened
+pre-treatment covariates, and then discarding all observations within
+any stratum that does not have at least one observation for each
+unique value of the treatment variable.
+
+To run this algorithm, we must choose a type of coarsening for each
+covariate.  We show how this is done this via a fully automated procedures
+in next section.  Then we show how to use explicit prior knowledge to
+choose the coarsening, which is normally preferable when feasible.
+
+In CEM, the treatment variable may be \emph{dichotomous} or
+\emph{multichotomous}\footnote{ While CEM can match for multichotomous
+  treatments, analysis with these matched samples is somewhat difficult.
+  For instance, \citet{IacKinPor12} develop weights for two treatment
+  groups and it is not obvious how to generalize these weights for more
+  treatment groups. We suggest users run CEM on each pair of treatment
+  levels, get the correct weights for each and calculate separate ATT.} .
+Alternatively, \texttt{cem} may be used for \emph{randomized block
+  experiments} without specifying a treatment variable; in this case the
+strata are simply returned without any pruning of observations.
+
+\subsubsection{Automated Coarsening}\label{s:cem-auto}
+
+In our running example we have a dichotomous treatment variable.  In the
+following code, we match on our chosen pre-treatment variables, but not
+\texttt{re78}, which is the outcome variable and so should never be
+included.
+
+The output contains useful information about the match, including a
+(small) table about the number of observations in total, matched, and
+unmatched by treatment group, as well as the results of a call to the
+\texttt{imb} function for information about the quality of the
+matched data. Since \texttt{cem} bounds the imbalance ex ante, the most
+important information is the number of observations matched.  But the
+results also give the imbalance in the matched data using the same
+measures as that in the original data described in Section \ref{s:basic}.
+Thus,
+
+\begin{verbatim}
+. cem age education black nodegree re74, tr(treated)
+
+Matching Summary:
+-----------------
+Number of strata: 205
+Number of matched strata: 67
+
+             0    1
+      All  425  297
+  Matched  324  228
+Unmatched  101   69
+
+
+Multivariate L1 distance: .46113967
+
+Univariate imbalance:
+
+                 L1      mean       min       25%       50%       75%
+      age    .13641   -.17634         0         0         0         0
+education    .00687    .00687         1         0         0         0
+    black   3.2e-16  -2.2e-16         0         0         0         0
+ nodegree   5.8e-16   4.4e-16         0         0         0         0
+     re74    .06787    34.438         0         0    492.23    39.425
+
+                max
+      age        -1
+education         0
+    black         0
+ nodegree         0
+     re74    96.881
+
+\end{verbatim}
+
+
+We can see from these results the number of observations matched and
+thus retained, as well as those which were pruned because they were
+not comparable.  By comparing the imbalance results to the original
+imbalance table given in the previous section, we can see that a good
+match can produce a substantial reduction in imbalance, not only in
+the means, but also in the marginal and joint distributions of the
+data.
+
+The function \texttt{cem} also generates weights for use in the
+evaluation of imbalance measures and estimates of the causal effect
+(stored in \texttt{cem\_weights}).
+
+\subsubsection{Coarsening by Explicit User Choice}\label{s:cem-user}
+
+The power and simplicity of CEM comes from choosing the coarsening
+yourself rather than using the automated algorithm as in the previous
+section.  Choosing the coarsening enables you to set the maximum level
+of imbalance ex ante, which is a direct function of the coarsening you
+choose.  By controlling the coarsening, you also put an explicit bound
+on the degree of model dependence and the SATT estimation error.
+
+Fortunately, the coarsening is a fundamentally substantive act, almost
+synonymous with the measurement of the original variables.  In other
+words, if you know something about the data you are analyzing, you
+almost surely have enough information to choose the coarsening.  (And
+if you don't know something about the data, you might ask why you are
+analyzing it in the first place!) 
+
+In general, we want to set the coarsening for each variable so that
+substantively indistinguishable values are grouped and assigned the
+same numerical value.  Groups may be of different sizes if
+appropriate.  Recall that any coarsening during CEM is used only for
+matching; the original values of the variables are passed on to the
+analysis stage for all matched observations.
+
+For numerical variables, we can use the cutpoints syntax in \texttt{cem}.
+Thus, for example, in the US educational system, the following
+discretization of years of education corresponds to different levels of
+school
+\begin{center}
+\begin{tabular}{ll}
+Grade school    & 0--6\\
+Middle school   & 7--8\\
+High school     & 9--12\\
+College         & 13--16\\
+Graduate school & $>$16 
+\end{tabular}
+\end{center}
+Using these natural breaks in the data to create the coarsening is
+generally a good approach and certainly better than using fixed bin sizes
+(as in caliper matching) that disregard these meaningful breaks.  In our
+data, no respondents fall in the last category,
+
+\begin{verbatim}
+. table education
+
+----------------------
+education |      Freq.
+----------+-----------
+        3 |          1
+        4 |          6
+        5 |          5
+        6 |          7
+        7 |         15
+        8 |         62
+        9 |        110
+       10 |        162
+       11 |        195
+       12 |        122
+       13 |         23
+       14 |         11
+       15 |          2
+       16 |          1
+----------------------
+
+\end{verbatim}
+
+We can use the cutpoints above using parentheses after the
+\texttt{education} variable:
+
+\begin{verbatim}
+. cem age education (0 6.5 8.5 12.5 17.5) black nodegree re74, tr(treated)
+
+Matching Summary:
+-----------------
+Number of strata: 155
+Number of matched strata: 53
+
+             0    1
+      All  425  297
+  Matched  349  245
+Unmatched   76   52
+
+
+Multivariate L1 distance: .43604654
+
+Univariate imbalance:
+
+                L1     mean      min      25%      50%      75%      max
+      age   .05034  -.15556        0        0        0        1       -1
+education    .0309   .00362        1       -1        0        0        2
+    black  8.2e-16  1.0e-15        0        0        0        0        0
+ nodegree  1.2e-15  1.9e-15        0        0        0        0        0
+     re74   .04975   2.5048        0        0   161.28   -17.37   1198.1
+
+\end{verbatim}
+
+As we can see, this matching solution differs from that resulting from our
+automated approach in the previous section. In fact, it has actually
+increased the balance in matching solution while giving us a higher number
+of matched units.
+
+\subsubsection{Coarsening categorical variables}
+
+For categorical variables that do not have a natural ordering, some
+recoding might be necessary before inputing to CEM. For instance, if we
+have a variable that is
+
+\begin{center}
+\begin{tabular}{ll}
+Strongly Agree    & 1\\
+Agree   & 2\\
+Neutral     & 3\\
+Disagree         & 4\\
+Strongly Disagree & 5\\
+No Opinion      & 6 
+\end{tabular}
+\end{center}
+there is a category (``No Opinion'') that does not fit on the ordinal
+scale of the variable. In our example dataset, we have such a variable,
+\texttt{q1},
+\begin{verbatim}
+
+. table q1
+
+------------------------------
+               q1 |      Freq.
+------------------+-----------
+   strongly agree |        121
+            agree |        111
+          neutral |        129
+         disagree |        121
+strongly disagree |        118
+       no opinion |        122
+------------------------------
+\end{verbatim}
+
+In order to coarsen this variable, first create a new coarsened variable
+using the \texttt{recode} command\footnote{For variables that are strictly
+  string (non-numeric) variables, users will need to first use the
+  \texttt{encode} command to convert the strings to numeric, then use
+  \texttt{recode}.}:
+\begin{verbatim}
+
+. recode q1 (1 2 = 1 "agree") (3 6 = 2 "neutral") (4 5 = 3 "disagree"), gen(cem_q1)
+(601 differences between q1 and cem_q1)
+
+. table cem_q1
+
+----------------------
+RECODE of |
+q1        |      Freq.
+----------+-----------
+    agree |        232
+  neutral |        251
+ disagree |        239
+----------------------
+
+\end{verbatim}
+
+Here we have collapsed the opinions into the direction of opinion, also
+grouping ``No Opinion'' with ``Neutral.''  Once the coarsened variable is
+created, you can pass this variable to CEM with the \texttt{(\#0)}
+cutpoints command after it to ensure that CEM does not coarsen further:
+
+\begin{verbatim}
+
+. cem age education black nodegree re74 cem_q1 (#0), tr(treated)
+
+Matching Summary:
+-----------------
+Number of strata: 315
+Number of matched strata: 81
+
+             0    1
+      All  425  297
+  Matched  260  190
+Unmatched  165  107
+
+
+Multivariate L1 distance: .5904067
+
+Univariate imbalance:
+
+                L1     mean      min      25%      50%      75%      max
+      age   .14574   -.1994        0        0        0        1       -1
+education   .00263   .00263        1        0        0        0        0
+    black  3.6e-16  6.7e-16        0        0        0        0        0
+ nodegree  3.5e-16  6.7e-16        0        0        0        0        0
+     re74   .09854   70.061        0        0    375.1  -383.76   96.881
+   cem_q1  3.1e-16  3.1e-15        0        0        0        0        0
+
+\end{verbatim}
+
+When calculating treatment effects after running CEM, be sure to use the
+original, uncoarsened variables for analysis. Coarsened variable should
+only be used to produce matches. After this, they can be discarded. 
+
+
+\subsection{Restricting the matching solution to a $k$-to-$k$ match}\label{s:k2k}
+
+By default, CEM uses maximal information, resulting in strata that may
+include different numbers of treated and control units.  To compensate for
+the differential strata sizes, \texttt{cem} also returns weights to be
+used in subsequent analyses.  Although this is generally the best option,
+a user with enough data may opt for a $k$-to-$k$ solution to avoid the
+slight inconvenience of needing to use weights.
+
+The argument \texttt{k2k} accomplishes this by pruning observations from a
+\texttt{cem} solution within each stratum until the solution contains the
+same number of treated and control units within all strata.  Pruning
+occurs within a stratum (for which observations are indistinguishable to
+\cem proper) by random matching inside \texttt{cem} strata\footnote{Note
+  that in the R version of this software pruning within strata can be done
+  using a distance metric.}.
+
+Here is an example of this approach. Running the earlier call with the
+\texttt{k2k} options yields:
+
+\begin{verbatim}
+. cem age education black nodegree re74, tr(treated) k2k
+
+Matching Summary:
+-----------------
+Number of strata: 205
+Number of matched strata: 67
+
+             0    1
+      All  425  297
+  Matched  205  205
+Unmatched  220   92
+
+
+Multivariate L1 distance: .37560976
+
+Univariate imbalance:
+
+                L1     mean      min      25%      50%      75%      max
+      age   .07805  -.10732        0        0        0        0       -1
+education        0        0        1        0        0        0        0
+    black        0        0        0        0        0        0        0
+ nodegree        0        0        0        0        0        0        0
+     re74    .0439  -34.547        0        0   -120.7  -214.55   96.881
+
+\end{verbatim}
+
+It is clear that the number of matched units has decreased after using the
+\texttt{k2k} option. 
+
+\subsection{Estimating the Causal Effect from $\tt cem$ output}
+
+Using the output from \texttt{cem}, we can estimate the SATT by the
+regular Stata methods, by simply including the \texttt{cem\_weights}. For
+example, 
+
+\begin{verbatim}
+. reg re78 treated [iweight=cem_weights]
+
+      Source |       SS       df       MS              Number of obs =     552
+-------------+------------------------------           F(  1,   550) =    3.15
+       Model |   128314324     1   128314324           Prob > F      =  0.0766
+    Residual |  2.2420e+10   550  40764521.6           R-squared     =  0.0057
+-------------+------------------------------           Adj R-squared =  0.0039
+       Total |  2.2549e+10   551  40923414.2           Root MSE      =  6384.7
+
+------------------------------------------------------------------------------
+        re78 |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+     treated |   979.1905   551.9132     1.77   0.077    -104.9252    2063.306
+       _cons |    4919.49   354.7061    13.87   0.000     4222.745    5616.234
+------------------------------------------------------------------------------
+
+\end{verbatim}
+
+For convenience, we compute this as a regression of the outcome variable
+on a constant and the treatment variable, where the SATT estimate is the
+coefficient on the \texttt{treated} variable, in our case 979.19.  Any
+Stata command that accepts weights (\texttt{aweight} or
+\texttt{iweight}) can be used.
+
+If exact matching (i.e., without coarsening) was chosen this procedure is
+appropriate as is.  In other situations, with some coarsening, some
+imbalance remains in the matched data.  The remaining imbalance is
+strictly bounded by the level of coarsening, which can be seen by any
+remaining variation within the coarsened bins.  Thus, a reasonable
+approach in this common situation is to attempt to adjust for the
+remaining imbalance via a statistical model.  (Modeling assumptions for
+models applied to the matched data are much less consequential than they
+would otherwise be because CEM is known to strictly bound the level of
+model dependence.)  To apply a statistical model to control for the
+remaining imbalance, we simply add variables to the regression command.
+For example:
+
+\begin{verbatim}
+. reg re78 treated re74 re75 [iweight=cem_weights]
+
+      Source |       SS       df       MS              Number of obs =     552
+-------------+------------------------------           F(  3,   548) =    5.42
+       Model |   649651702     3   216550567           Prob > F      =  0.0011
+    Residual |  2.1899e+10   548  39961951.7           R-squared     =  0.0288
+-------------+------------------------------           Adj R-squared =  0.0235
+       Total |  2.2549e+10   551  40923414.2           Root MSE      =  6321.5
+
+------------------------------------------------------------------------------
+        re78 |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+     treated |    988.083   546.5395     1.81   0.071    -85.48584    2061.652
+        re74 |  -.0174322   .1593346    -0.11   0.913    -.3304134    .2955491
+        re75 |   .3190651   .1744905     1.83   0.068     -.023687    .6618172
+       _cons |   4287.523   393.0883    10.91   0.000     3515.378    5059.667
+------------------------------------------------------------------------------
+
+\end{verbatim}
+
+
+The user can also specify \texttt{glm} modeling in the case of binary,
+count, or other noncontinuous outcome variables by utilizing their
+commands in Stata (\texttt{logit},\texttt{ poisson}, etc) combined with the
+\texttt{iweight} syntax.
+
+\subsection{Matching and Missing Data}\label{s:mv}
+
+Almost all previous methods of matching assume the absence of any missing
+values.  In contrast, CEM offers two approaches to dealing with
+missing values (item nonresponse).  In the first, where we treat missing
+values as one of the values of the variables, is appropriate when
+``\texttt{.}'' is a valid value that is not really missing (such as when
+``no opinion'' really means no opinion).  The other is a special procedure
+to allow for multiply imputed data in CEM.
+
+\subsubsection{Matching on Missingness}\label{s:mvdirect}
+
+If users leave missing values in the data, \cem will coarsen the variables
+as normal, but use ``\texttt{.}'' as a separate category for each
+variable. Thus, \cem will match on missingness. 
+
+\subsubsection{Matching Multiply Imputed Data in a Single File}\label{s:mvmiflong}
+
+Consider a data set to be matched, some of which is missing. One
+approach to analyzing data with missing values is \emph{multiple
+imputation}, which involves creating $m$ (usually about $m=5$) data
+sets, each of which is the same as the original except that the
+missing values have been imputed in each.  Uncertainty in the values
+of the missing cells is represented by variation in the imputations
+across the different imputed data sets \citep{KinHonJos01}.
+
+When one uses the \texttt{mi} commands in Stata to impute missing
+data, the program can return the data in a stacked or \texttt{flong}
+format. The \texttt{cem} command can take advantage of this format to
+easily match multiply imputed datasets. Note that the data must be in
+the \texttt{flong} format: one dataset with $\tilde{n} = n + m \times
+n$ observations, where $m$ is the number of imputed datasets and $n$
+is the number of observations in the original dataset. The first $n$
+rows of the data are the original dataset and the following $m \times
+n$ rows are each of the imputed datasets. When using the \texttt{mi}
+commands in Stata, you can ensure the data are in this format by using
+\texttt{mi set flong} or \texttt{mi convert flong}.
+
+Once you have your imputed data in \texttt{flong} format, you can pass
+the data to \texttt{cem} along with the imputation variable and
+\texttt{cem} will match the multiple imputations. The CEM algorithm
+first runs on the entire stacked dataset of imputations, with possibly
+different strata for each imputation. To combine strata across
+imputation, CEM chooses the strata most often assigned to an
+observation. This strata assignment is given to each of the imputed
+datasets (that is, the \texttt{cem\_weights} variable is added to each
+of the datasets).
+
+To run this command simply add the \texttt{impvar} option:
+
+\begin{verbatim}
+. use "http://www.mattblackwell.org/files/stata/imp-lelonde.dta", clear
+(Written by R.              )
+
+. mi import flong, m(imp) id(mi_id)
+
+. cem age education black nodegree re74, tr(treated) impvar(imp)
+(using the scott break method for imbalance)
+
+Matching Summary:
+-----------------
+Number of strata: 244
+Number of matched strata: 85
+
+             0    1
+      All  425  297
+  Matched  299  229
+Unmatched  126   68
+
+
+Multivariate L1 distance: .37560605
+
+Univariate imbalance:
+
+                L1     mean      min      25%      50%      75%      max
+      age   .08093  -.05183        0        0        0        0       -1
+education   .01276  -.00457        0        0        0        0        0
+    black   .00218   .00063        0        0        0        0        0
+ nodegree   .00437  -.00092        0        0        0        0        0
+     re74   .05257   1.1624        0        0    104.2   232.05   1401.7
+\end{verbatim}
+Now that we have run \texttt{cem}, we can then use \texttt{mi
+  estimate} to easily combine regressions from the imputed datasets to
+estimate the SATT \citep{KinHonJos01}, being sure to weight by the
+\texttt{cem\_weights}:
+\begin{verbatim}
+. mi estimate: reg re78 treated [iweight=cem_weights]
+
+Multiple-imputation estimates                     Imputations     =          5
+Linear regression                                 Number of obs   =        528
+                                                  Average RVI     =     0.0353
+                                                  Largest FMI     =     0.0308
+                                                  Complete DF     =        526
+DF adjustment:   Small sample                     DF:     min     =     455.20
+                                                          avg     =     472.43
+                                                          max     =     489.65
+Model F test:       Equal FMI                     F(   1,  455.2) =       4.04
+Within VCE type:          OLS                     Prob > F        =     0.0450
+
+------------------------------------------------------------------------------
+        re78 |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+-------------+----------------------------------------------------------------
+     treated |   1112.818   553.5378     2.01   0.045     25.01139    2200.624
+       _cons |   4867.038   362.5507    13.42   0.000     4154.691    5579.385
+------------------------------------------------------------------------------
+
+\end{verbatim}
+
+In addition to the built-in multiple imputation tools, there are
+several user-written tools for combining multiple regression output
+such as \texttt{miest} written by Ken Scheve\footnote{\texttt{miest}
+  is available at
+  \url{http://gking.harvard.edu/amelia/amelia1/docs/mi.zip}.} and
+\texttt{clarify}\footnote{Clarify is available at
+  \url{http://gking.harvard.edu/stats.shtml\#clarify}}.
+
+\subsubsection{Matching Multiply Imputed Data in Separate Files}\label{s:mvmi}
+
+Suppose that we have used some imputation program (such as
+\citep{HonKinBLa10}) to produce 5 imputed datasets, saved as:
+
+\begin{verbatim}
+imp1.dta
+imp2.dta
+imp3.dta
+imp4.dta
+imp5.dta
+\end{verbatim}
+
+As an example we added missingness to the example dataset and imputed it
+using \citet{HonKinBLa10}\footnote{If users are interested in working with
+  this example, they can access these sample files at
+  \url{http://gking.harvard.edu/cem/imp1.dta}, etc. Once all five are
+  downloaded, users can generate the following output. The original data
+  file with missingness added is at
+  \url{http://gking.harvard.edu/cem/lelonde.dta}}. If we place all of the
+imputed datasets in the same directory and open the first, we can run  \cem
+with the \texttt{miname} and \texttt{misets} arguments to specify the
+root of the imputed datasets' filename and the number of datasets,
+respectively.  In our example, this would be:
+
+\begin{verbatim}
+. use imp1.dta, clear
+
+. 
+. cem age education black nodegree re74, tr(treated) miname(imp) misets(5)
+
+Matching Summary:
+-----------------
+Number of strata: 235
+Number of matched strata: 76
+
+             0    1
+      All  425  297
+  Matched  312  217
+Unmatched  113   80
+
+
+Multivariate L1 distance: .38286064
+
+Univariate imbalance:
+
+                L1     mean      min      25%      50%      75%      max
+      age   .02132  -.07344   .19196        0        1        0       -1
+education   .01173   -.0121        1        0        0        0        0
+    black   .00207   .00041        0        0        0        0        0
+ nodegree   .00461  -.00092        0        0        0        0        0
+     re74   .04987  -4.1404  -398.68        0    375.1   -236.7   96.881
+
+\end{verbatim}
+
+Note that \texttt{cem} outputs the data in a single, stacked format so that we
+can use the estimation procedure as with a single file above. 
+
+% The output is identical to a normal run of \cem and the output can be
+% interpreted similarly. 
+
+% Now we estimate SATT via the usual multiple imputation combining
+% formulas (averaging the point estimates and within and between
+% variances, as usual; see \citealt{KinHonJos01}), being sure to use the
+% \cem weights. This is simple using the \texttt{miest} command by Ken
+% Scheve\footnote{\texttt{miest} is available at
+%   \url{http://gking.harvard.edu/amelia/amelia1/docs/mi.zip}.}. For example,
+
+% \begin{verbatim}
+% . miest imp reg re78 treated [aweight=cem_weights]
+
+% Multiple Imputation Estimates
+
+% Model: regress
+% Dependent Variable: re78
+
+% Number of Observations: 529
+% ---------------------------------------------------------------
+%          |      Coef.   Std. Err.       t          Df     P>|t|
+% ---------------------------------------------------------------
+%  treated |   1269.2     557.2244      2.278      10902    0.023
+%    _cons |   4814.5     355.8442     13.530      22308    0.000
+% ---------------------------------------------------------------
+
+
+% \end{verbatim}
+
+
+% Note that we have to use \texttt{aweight} instead of \texttt{iweight}
+% as above (this is due to compatibility issues). One can use
+% \texttt{miest} to implement a number of parametric models with the
+% matching weights. In addition, \texttt{clarify}\footnote{Clarify is
+%   available at \url{http://gking.harvard.edu/stats.shtml\#clarify}} is
+% a useful program for analyzing multiply imputed data:
+
+% \begin{verbatim}
+% . estsimp reg re78 treated [iweight=cem_weights], mi(imp1.dta imp2.dta imp3.dta
+% >  imp4.dta imp5.dta)
+
+% \oom
+
+% Regress estimates (via multiple imputation)          Nobs = 528
+
+% ---------------------------------------------------------------
+%     re78 |      Coef.   Std. Err.       t         d.f.    P>|t|
+% ---------+-----------------------------------------------------
+%  treated |   1269.205   557.7437      2.276      10943    0.023
+%    _cons |    4814.52   356.1777     13.517      22392    0.000
+% ---------------------------------------------------------------
+
+% Number of simulations  : 1000
+% Names of new variables : b1 b2 b3
+% Datasets used for MI   : imp1.dta imp2.dta imp3.dta imp4.dta imp5.dta
+
+% \end{verbatim}
+
+
+% Note that here we were able to use the \texttt{iweight} command as in our
+% earlier analyses. 
+
+
+\subsection{Blocking in Randomized Experiments} 
+
+CEM can produce strata for a block randomized design for a set of
+pre-treatment covariates. As block randomized designs outperform complete
+randomization on bias, efficiency, power and robustness, it should be used
+whenever possible \citep{ImaKinNal09,ImaKinStu08}. To create a set of
+strata for a block randomized design, simply run CEM without passing a
+treatment variable. This will assign observations to strata based on their
+coarsened values and create a \texttt{cem\_strata} variable, indicating
+this assignment. Once this is complete, simply randomly assign treatment
+within these strata to complete the block randomized design.
+
+\subsection{Using \texttt{cem} to Improve Other Matching Methods}
+
+Even if you plan to use a different matching method, you can still use the
+CEM algorithm to improve that matching solution. An important step before
+matching is restricting the data to areas of common empirical support.
+This avoids making inference based on extrapolation as such inferences are
+known to be extremely model dependent. Traditional matching methods, however,
+are not equipped to handle this situation. For example, the propensity
+score can be used to find the area of extrapolation only after we know
+that the correct propensity score model has been used.  However, the only
+way to verify that the correct propensity score model has been specified
+is to check whether matching on it produces balance between the treated
+and control groups on the relevant covariates.  But balance cannot be
+reliably checked until the region of extrapolation has been removed.  To
+avoid this type of infinite regress, researchers use entirely different
+technologies for the first step, such as kernel density estimation
+\citep{HecIchTod97} or dropping control units outside the hyper-rectangle
+\citep{IacPor08} or convex hull \citep{KinZen06} of the treated units.
+
+The matching methods currently in Stata all rely on propensity score
+methods for restricting the data to common empirical support. For CEM, on
+the other hand, this restriction is a natural consequence of the
+algorithm. All observations within a stratum containing both a treated and
+control unit are by definition inside of the common support. In light of
+this, a good use of CEM would be to reduce the data to common support
+before applying another matching solution such as
+\texttt{psmatch2},\texttt{ nnmatch}, or \texttt{pscore}. This will improve
+the quality of the inferences drawn from these methods. Once you have run
+\texttt{cem}, all you must do is run the following command to restrict the
+data to common support:
+
+\begin{verbatim}
+. drop if cem_matched == 0
+\end{verbatim}
+
+Alternatively, you can use any of the matching methods with an 
+\texttt{if cem\_matched==1} option. This will force the other matching 
+methods to only match in the region of common support. As an example using
+\texttt{nnmatch}, this would be
+
+\begin{verbatim}
+. nnmatch re78 treated age education black nodegree re74  if cem_matched == 1
+\end{verbatim}
+Of course  you can apply this idea to any matching method in Stata, not
+just the ones listed here. 
+
+\section{\texttt{cem} -- Coarsened Exact Matching}
+
+\subsection{Syntax}
+
+.  cem {\it varname1} [({\it cutpoints1})] [{\it varname2}
+    [({\it cutpoints2})]] ... [, 
+    \underline{tr}eatment({\it varname}) \underline{sh}owbreaks 
+    \underline{auto}cuts({\it string}) k2k imbbreaks({\it string}) 
+    miname({\it string}) misets(\#)]
+
+\subsection{Description}
+
+\texttt{cem} implements the Coarsened Exact Matching method described in
+\citet{IacKinPor12}. The main inputs for \texttt{cem} are the
+variables to use (\textit{varname\#}) and the cutpoints that define the
+coarsening (\textit{cutpoints\#}). The latter option is set in a
+parentheses after the name of the relevant variable. Users can either
+specify cutpoints for a variable or allow \texttt{cem} to automatically
+coarsen the data based on an automatic coarsening algorithm, chosen by the
+user.  To specify a set of cutpoints for a variable, place a numlist in
+parentheses after the variable's name. To specify an automatic coarsening,
+place a string indicating the binning algorithm to use in parentheses
+after the variable's name. To create a certain number of equally
+spaced cutpoints including the extreme values, say 10, place \texttt{\#10} in the parentheses (using \texttt{\#0}
+will force \texttt{cem} into not coarsening the variable at all). Omitting
+the parenthetical statement after the variable name tells \texttt{cem} to
+use the default binning algorithm, itself set by \texttt{autocuts}.
+
+Note that character variables are ignored by \texttt{cem}. These variables
+will need to be converted into numeric variables using
+\texttt{encode}. Coarsening that are not ordinal must be done before
+running \texttt{cem} using the \texttt{recode} command, as described
+above. 
+
+
+\subsection{Options}
+\hangindent=\parindent\hangafter=1\noindent \texttt{\underline{tr}eatment(varname)} tells \cem which
+variable should be used for matching.
+
+
+\hangindent=\parindent\hangafter=1\noindent\texttt{\underline{sh}owbreaks} will have \cem display the
+cutpoints used for each variable on the screen.
+
+\hangindent=\parindent\hangafter=1\noindent\texttt{\underline{auto}cuts({\it string})} sets the default automatic
+coarsening algorithm. The default for this is ``sturges''. Any variable
+without a \texttt{cutpoint\#} command after its name will use the autocuts
+argument.
+  
+\hangindent=\parindent\hangafter=1\noindent\texttt{k2k} will have \texttt{cem} produce a matching result
+that has the same number of treated and control in each matched strata by
+randomly dropping observations.
+  
+\hangindent=\parindent\hangafter=1\noindent\texttt{imbbreaks({\it string})} sets the coarsening method for the
+imbalance checks printed after \texttt{cem} runs. This should match
+whichever method is used for imbalance checks elsewhere. If either
+\texttt{cem} or \texttt{imb}has been run and there is a
+\texttt{r(L1\_breaks)} available, this will be the default.  Otherwise, the
+default for this is ``scott''
+
+\hangindent=\parindent\hangafter=1\noindent\texttt{miname({\it string})} is the root of the filenames of the
+imputed dataset. They should be in the working directory. For example, if
+\texttt{miname} were ``imputed'', then the filenames should be
+``imputed1.dta'',``imputed2.dta'' and so on.  
+
+\hangindent=\parindent\hangafter=1\noindent\texttt{misets(\#)} is the number of imputed datasets being
+used for matching.
+
+\subsection{Output}
+
+The output \cem returns depends on the inclusion of a treatment variable.
+If the treatment variable is provided, \cem will match and return the
+following three variables in the current dataset:
+
+\hangindent=\parindent\hangafter=1\noindent\texttt{cem\_strata} is the strata number assigned to each
+observation by \texttt{cem}.
+  
+\hangindent=\parindent\hangafter=1\noindent\texttt{cem\_matched} is 1 for a matched observation and 0 for an
+unmatched observation.
+  
+\hangindent=\parindent\hangafter=1\noindent\texttt{cem\_weights} is the weight of the stratum for each
+observation.  Strata with unmatched units are give 0 weight and treated
+observations are given a weight of 1.
+  
+\hangindent=\parindent\hangafter=1\noindent\texttt{cem\_treat} when using the multiple imputation features,
+\cem outputs this variable, which is the treatment vector used for
+matching. \cem applies the same combination rule to treatment as to
+strata.
+
+If the options for multiple imputation are used, \cem saves each of these
+variables in each of the imputed datasets, allowing for easy use in programs
+like \texttt{miest}.
+
+The following are stored as saved results in Stata's memory:
+
+\begin{tabular}{ll}
+Scalars &\\
+\texttt{r(n\_strata)} & number of strata. \\
+\texttt{r(n\_groups)} & number of treatment levels.\\
+\texttt{r(n\_mstrata)} & number of strata with matches.\\
+\texttt{r(n\_matched)} &  number of matched observations.\\
+\texttt{r(L1)} &  multivariate imbalance measure. \\
+Matrices&\\
+\texttt{r(match\_table)} & table of treatment vs matched.\\
+\texttt{r(groups)}&  tabulation of treatment variable.\\
+\texttt{r(imbal)} &  univariate imbalance measures.\\
+Macros&\\
+\texttt{r(varlist)} & covariate variables used.\\
+\texttt{r(treatment)} & treatment variable.\\
+\texttt{r(cem\_call)} & call to cem. \\
+\texttt{r(L1\_breaks)} &break method used for L1 distance
+\end{tabular}
+
+If the treatment variable is omitted (e.g. for blocking), then the only outputs
+are \texttt{cem\_strata}, \texttt{r(n\_strata)}, \texttt{r(varlist)}, and
+\texttt{r(cem\_call)}.
+
+\section{\texttt{imb} - Imbalance Measures for CEM}
+
+\subsection{Syntax}
+imb {\it varlist} [if] [in] [, \underline{tr}eatment({\it varname})
+  breaks({\it string}) miname({\it string}) misets({\it string}) \underbar{use}weights]
+\subsection{Description}
+
+\texttt{imb} returns a number of measures of imbalance in covariates
+between treatment and control groups. A multivariate L1 distance,
+univariate L1 distrances, difference in means and empirical quantiles
+difference are reported. The L1 measures are computed by coarsening the
+data according to \texttt{breaks} and comparing across the multivariate
+histogram. See \cite{IacKinPor12} for more details on this measure.
+ 
+\subsection{Arguments}
+\hangindent=\parindent\hangafter=1\noindent\texttt{treatment(varname)} sets the treatment variable used for
+  the imbalance checks.
+  
+  \hangindent=\parindent\hangafter=1\noindent\texttt{breaks(string)} sets the default automatic coarsening
+  algorithm. If either \texttt{cem} or \texttt{imb} has been run and
+  there is a \texttt{r(L1\_breaks)} available, this will be the default.
+  Otherwise, the default for this is ``scott''. It is not incredibly
+  important which method is used here as long as it is consistent.
+  
+\hangindent=\parindent\hangafter=1\noindent\texttt{miname(string)} is the root of the filenames of the imputed
+  dataset. They should be in the working directory. For example, if
+  \texttt{miname} were ``imputed'', then the filenames should be
+  ``imputed1.dta'',``imputed2.dta'' and so on.
+  
+\hangindent=\parindent\hangafter=1\noindent\texttt{misets(integer)} is the number of imputed datasets being
+  used for matching.
+
+\hangindent=\parindent\hangafter=1\noindent\texttt{useweights} makes \texttt{imb}use the weights from the output of \texttt{cem}. This is useful for checking balance after running \texttt{cem}.
+
+\subsection{Saved Results}
+\begin{tabular}{ll}
+Scalars&\\
+\texttt{r(L1)} & multivariate imbalance measure\\
+Matrices &\\
+\texttt{r(imbal)} & matrix of univariate imbalance measures\\
+Macros &\\
+\texttt{r(L1\_breaks)}& break method used for L1 distance
+
+\end{tabular}
+
+\bibliographystyle{apsr} 
+\bibsep=0in 
+\bibliography{gk,gkpubs}
+
+\end{document}
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-master: t
+%%% End: 

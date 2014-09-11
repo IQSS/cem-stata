@@ -1,0 +1,15 @@
+d cem: Software for Coarsened Exact Matching
+d
+d Version 1.2 (Septemeber 2, 2012)
+d
+d Matthew Blackwell, Harvard University
+d Stefano Iacus, University of Milan
+d Gary King, Harvard University
+d Giuseppe Porro, University of Trieste
+d
+d For a brief description of cem, type ^net describe cem^
+d To download documentation to your working directory, type ^net get cem^
+d To install cem program files, type type ^net install cem^
+d
+p cem Software for Coarsened Exact Matching
+

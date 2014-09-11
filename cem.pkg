@@ -1,0 +1,27 @@
+d cem: Software for Coarsened Exact Matching
+d
+d Version 1.2 (September 2nd, 2012)
+d
+d Matthew Blackwell, University of Rochester
+d Stefano Iacus, University of Milan
+d Gary King, Harvard University
+d Giuseppe Porro, University of Trieste
+d
+d This program is designed to improve estimation of causal effects
+d via a powerful method that is widely applicable in observational
+d data and exceptionally easy to understand and use (if you 
+d understand how to draw a histogram, you will understand this method).
+d The program implements the CEM (Coarsened Exact Matching) algoritm
+d described in Iacus, King and Porro (2012). 
+d  
+d
+d Support: email m.blackwell [at] rochester.edu
+d
+d 
+f cem.ado
+f imb.ado
+f listwise.ado
+f cem.sthlp
+f imb.sthlp
+f listwise.sthlp
+F cem-mata.do
