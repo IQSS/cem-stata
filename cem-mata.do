@@ -250,7 +250,11 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
 
     if (_st_varindex("cem_strata")!=.)
       st_dropvar("cem_strata")
-    (void) st_addvar("int","cem_strata")
+    if (nstrata > 32700) {
+      (void) st_addvar("long","cem_strata")
+    } else {      
+      (void) st_addvar("int","cem_strata")
+    }
     st_store(., "cem_strata", strata)
     st_rclear()
     st_numscalar("r(n_strata)", nstrata)
