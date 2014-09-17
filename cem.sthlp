@@ -12,7 +12,7 @@
 {title:Syntax}
 
 {p 8 14 2}
-{opt cem} {it:varname1} [{it:(cutpoints1)}] [{it:varname2} [{it:(cutpoints2)}]]{it: ...} [{cmd:,} {it:options}]
+{opt cem} {it:varname1} [{it:(cutpoints1)}] [{it:varname2} [{it:(cutpoints2)}]]{it: ...} {ifin} [{cmd:,} {it:options}]
 
 
 {synoptset 20 tabbed}{...}
