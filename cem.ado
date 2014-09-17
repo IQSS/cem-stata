@@ -14,7 +14,9 @@ version 10.1
 
 return local cem_call = "`0'"
 
-syntax anything(name=coarse id="variable list") [if] [in] [, TReatment(varname) AUTOcuts(string) K2k SHowbreaks imbbreaks(string) miname(string) misets(real 0) NOIMBal IMPvar(varname)]
+syntax anything(name=coarse id="variable list") [if] [, TReatment(varname) AUTOcuts(string) K2k SHowbreaks imbbreaks(string) miname(string) misets(real 0) NOIMBal IMPvar(varname)]
+
+marksample touse
 
 if ("`autocuts'" == "") {
     local autocuts sturges

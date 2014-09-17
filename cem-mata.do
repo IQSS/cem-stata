@@ -207,6 +207,7 @@ struct cemout cem(numeric matrix data, real colvector treatment,
 void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
   n = rows(x)
   k = cols(x)
+  touse = st_local("touse")
 
   strs = strofreal(x)
   xx = J(n,1,"")
@@ -269,7 +270,7 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
     } else {      
       (void) st_addvar("int","cem_strata")
     }
-    st_store(., "cem_strata", strata)
+    st_store(., "cem_strata", touse, strata)
     st_rclear()
     st_numscalar("r(n_strata)", nstrata)
     
@@ -278,7 +279,7 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
       if (_st_varindex("cem_matched")!=.)
         st_dropvar("cem_matched")
       (void) st_addvar("double","cem_matched")
-      st_store(.,"cem_matched",matched)
+      st_store(.,"cem_matched", touse,matched)
       st_matrix("r(groups)", groups)
       st_matrix("r(gtable)",gtable)
       st_matrixcolstripe("r(gtable)", (J(ngroups,1,""),strofreal(groups)))
@@ -301,7 +302,7 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
       if (_st_varindex("cem_weights")!=.)
         st_dropvar("cem_weights")
       (void) st_addvar("double","cem_weights")
-      st_store(., "cem_weights", wh)
+      st_store(., "cem_weights", touse, wh)
       st_numscalar("r(n_matched)",sum(matched:==1))
       st_numscalar("r(n_mstrata)",length(uniqrows(strata:*matched))-1)
     }
@@ -353,6 +354,7 @@ struct cemout function cemStata(string scalar varlist, string scalar cutlist,
 
   struct cemout scalar out
   string vector cutpoints
+  touse = st_local("touse")
   real scalar L1
 
   varlist = tokens(varlist)
@@ -382,15 +384,15 @@ struct cemout function cemStata(string scalar varlist, string scalar cutlist,
   }
 
   
-  data = st_data(.,varlist)
+  data = st_data(.,varlist, touse)
 
   if (treat == "")
     treatment = .
   else
-    treatment = st_data(.,treat)
+    treatment = st_data(.,treat, touse)
 
   if (impvar != "") {
-    imps = st_data(.,impvar)
+    imps = st_data(.,impvar, touse)
     m = max(imps)
     data = select(data, imps :> 0)
     treatment = select(treatment, imps :> 0)
