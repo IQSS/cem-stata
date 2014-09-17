@@ -231,7 +231,7 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
       thistreat = oneInds(treat[i] :== groups)
       gtable[strata[i],thistreat] = gtable[strata[i],thistreat] + 1
       if (min(gtable[strata[i],]) > 0) {
-          matched = matched + (1-matched):*(strata:==strata[i])
+          matched = matched :+ (1:-matched):*(strata:==strata[i])
       }
     } 
   }
