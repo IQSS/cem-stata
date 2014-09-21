@@ -1,61 +1,56 @@
-/*
-*
-* cem.ado - coarsened exact matching
-*
-* Inputs: varlist: data on which to match
-*         treatment(): name of the treatment variable
-*         [cutpoints(): list of cutpoints for each variable]
-*         [eval.imbalance: logical to evaluate balance]
-*         [k2k: return k-to-k matching?]
-*         [verbose: print to screen?]
-*
-*/
+//
+//
+// cem.ado - coarsened exact matching
+//
+// Inputs: varlist: data on which to match
+//         treatment(): name of the treatment variable
+//         [cutpoints(): list of cutpoints for each variable]
+//        [eval.imbalance: logical to evaluate balance]
+//         [k2k: return k-to-k matching?]
+//        [verbose: print to screen?]
 
-
-
-  program define cem, rclass
+program define cem, rclass
 version 10.1
 
 return local cem_call = "`0'"
 
-/* first we'll parse the input, first we seperate the */
-  gettoken coarse 0 : 0, parse(",")
+syntax anything(name=coarse id="variable list") [if] [, TReatment(varname) AUTOcuts(string) K2k SHowbreaks imbbreaks(string) miname(string) misets(real 0) NOIMBal IMPvar(varname)]
 
-syntax [, TReatment(varname) AUTOcuts(string) K2k SHowbreaks imbbreaks(string) miname(string) misets(real 0) NOIMBal IMPvar(varname)]
+marksample touse
 
 if ("`autocuts'" == "") {
-  local autocuts sturges
+    local autocuts sturges
 }
 
 if ("`imbbreaks'" == "") {
-  if ("`r(L1_breaks)'" == "") {
-    local imbbreaks scott
-  }
-  else {
-    local imbbreaks "`r(L1_breaks)'"
-    dis in green "(using the `imbbreaks' break method for imbalance)"
-  }
+    if ("`r(L1_breaks)'" == "") {
+        local imbbreaks scott
+    }
+    else {
+        local imbbreaks "`r(L1_breaks)'"
+        dis in green "(using the `imbbreaks' break method for imbalance)"
+    }
 }
 
 
-/* getting the list of user-given cuts */
-  local more 1
+// getting the list of user-given cuts
+local more 1
 while `more' > 0 {
-  gettoken currvar coarse : coarse, parse("() ") match(paren)
-  if "`currvar'" == "" {
-    local more 0
-  }
-  else {
-    local varlist `varlist' `currvar'
-    mata: st_local("peek", substr(strltrim("`coarse'"),1,1))
-    if "`peek'" == "(" {
-      gettoken currcut coarse : coarse, parse("() ") match(paren)
-      local varcuts `varcuts' (`currcut')
+    gettoken currvar coarse : coarse, parse("() ") match(paren)
+    if "`currvar'" == "" {
+        local more 0
     }
     else {
-      local varcuts `varcuts' (`autocuts')
+        local varlist `varlist' `currvar'
+        mata: st_local("peek", substr(strltrim("`coarse'"),1,1))
+        if "`peek'" == "(" {
+            gettoken currcut coarse : coarse, parse("() ") match(paren)
+            local varcuts `varcuts' (`currcut')
+        }
+        else {
+            local varcuts `varcuts' (`autocuts')
+        }
     }
-  }
 }
 
 mata: cem_out = cemStata("`varlist'","`varcuts'","`treatment'","`showbreaks'","`miname'", `misets', "`impvar'")

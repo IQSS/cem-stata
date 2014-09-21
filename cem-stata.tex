@@ -24,8 +24,8 @@
 
 \title{\tt{cem}\sf{: Coarsened Exact Matching in Stata}} \author{Matthew
   Blackwell\thanks{Institute for Quantitative Social Science,1737
-    Cambridge Street, Harvard University, Cambridge MA 02138;
-    \texttt{blackwel@fas.harvard.edu}).}
+    Cambridge Street, Harvard University, Cambridge MA 02138; \texttt{http://www.mattblackwell.org},
+    \texttt{mblackwell@gov.harvard.edu}).}
 %
 \and %
 %
@@ -314,7 +314,7 @@ skewed with point masses at zero. You can load this data into Stata using
 the command
 
 \begin{verbatim}
-use http://gking.harvard.edu/cem/lalonde.dta, clear
+use http://www.mattblackwell.org/files/stata/data/lalonde.dta, clear
 \end{verbatim}
 
 Matching is not a method of estimation; it is a way to preprocess a
@@ -1135,7 +1135,7 @@ and control groups on the relevant covariates.  But balance cannot be
 reliably checked until the region of extrapolation has been removed.  To
 avoid this type of infinite regress, researchers use entirely different
 technologies for the first step, such as kernel density estimation
-\citep{HecIchTod97} or dropping control units outside the hyper-rectangle
+\citep{HecIchTod98} or dropping control units outside the hyper-rectangle
 \citep{IacPor08} or convex hull \citep{KinZen06} of the treated units.
 
 The matching methods currently in Stata all rely on propensity score
@@ -1170,7 +1170,7 @@ just the ones listed here.
 \subsection{Syntax}
 
 .  cem {\it varname1} [({\it cutpoints1})] [{\it varname2}
-    [({\it cutpoints2})]] ... [, 
+    [({\it cutpoints2})]] ... [if] [in] [, 
     \underline{tr}eatment({\it varname}) \underline{sh}owbreaks 
     \underline{auto}cuts({\it string}) k2k imbbreaks({\it string}) 
     miname({\it string}) misets(\#)]

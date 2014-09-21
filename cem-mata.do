@@ -14,7 +14,6 @@ mata:
 mata clear
 
 
-
 real scalar sturges(x) {
   classes = ceil((log10(rows(x))/log10(2))+1)
   return(classes)
@@ -208,6 +207,7 @@ struct cemout cem(numeric matrix data, real colvector treatment,
 void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
   n = rows(x)
   k = cols(x)
+  touse = st_local("touse")
 
   strs = strofreal(x)
   xx = J(n,1,"")
@@ -222,11 +222,21 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
   if (args()==3) {
     groups = uniqrows(treat)
     ngroups = length(groups)
-    gtable = J(nstrata,ngroups,.)
-    mstrata = J(n,1,0)
+    gtable = J(nstrata,ngroups,0)
+    matched = J(n,1,0)
   }
 
-  for (i = 1; i <= nstrata; i++) {
+  for (i = 1; i <= n; i++) {
+    strata[i] = lookup(xx[i], st)
+    if (args() == 3) {
+      thistreat = oneInds(treat[i] :== groups)
+      gtable[strata[i],thistreat] = gtable[strata[i],thistreat] + 1
+      if (min(gtable[strata[i],]) > 0) {
+          matched = matched :+ (1:-matched):*(strata:==strata[i])
+      }
+    } 
+  }
+/*  for (i = 1; i <= nstrata; i++) {
     strata = strata :+ i:*strmatch(xx,st[i])
 
     if (args()==3) {
@@ -238,8 +248,13 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
       }
     }
   }
-
-
+*/
+  /* if (args() == 3) { */
+  /*   mstrata = rowmin(gtable) :> 0 */
+  /*   for (i = 1; i <=nstrata; i++) { */
+  /*     matched = matched + (strata:==i):*mstrata[i] */
+  /*   } */
+  /* } */
   if (impvar != "") {
     if (args() == 3) {
       combineMulticem(strata, impvar, treat)
@@ -255,17 +270,16 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
     } else {      
       (void) st_addvar("int","cem_strata")
     }
-    st_store(., "cem_strata", strata)
+    st_store(., "cem_strata", touse, strata)
     st_rclear()
     st_numscalar("r(n_strata)", nstrata)
     
     
     if (args()==3) {
-      mstrata = strata :* (1:-mstrata)
       if (_st_varindex("cem_matched")!=.)
         st_dropvar("cem_matched")
       (void) st_addvar("double","cem_matched")
-      st_store(.,"cem_matched",mstrata:!=0)
+      st_store(.,"cem_matched", touse,matched)
       st_matrix("r(groups)", groups)
       st_matrix("r(gtable)",gtable)
       st_matrixcolstripe("r(gtable)", (J(ngroups,1,""),strofreal(groups)))
@@ -280,17 +294,17 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
       st_matrix("r(cem_sum)", cemsum)
       st_matrixrowstripe("r(cem_sum)", (J(3,1,""),("All"\ "Matched"\"Unmatched")))
       st_matrixcolstripe("r(cem_sum)",(J(ngroups,1,""),strofreal(groups)))
-      wh = gtable[,2]:/gtable[,1] :* sum(treat:==groups[1] :& mstrata :> 0)/
-        sum(treat:==groups[2] :& mstrata :> 0)
-      wh = wh[strata',] :* (mstrata:>0)
+      wh = gtable[,2]:/gtable[,1] :* sum(treat:==groups[1] :& matched :== 1)/
+        sum(treat:==groups[2] :& matched :== 1)
+      wh = wh[strata',] :* (matched:==1)
       wh = wh :* (!(wh :> 0 :& treat:==1)) + (wh :> 0 :& treat:==1)
       wh = editmissing(wh, 0)
       if (_st_varindex("cem_weights")!=.)
         st_dropvar("cem_weights")
       (void) st_addvar("double","cem_weights")
-      st_store(., "cem_weights", wh)
-      st_numscalar("r(n_matched)",sum(mstrata:!=0))
-      st_numscalar("r(n_mstrata)",length(uniqrows(mstrata))-1)
+      st_store(., "cem_weights", touse, wh)
+      st_numscalar("r(n_matched)",sum(matched:==1))
+      st_numscalar("r(n_mstrata)",sum(uniqrows(strata:*matched):>0))
     }
   }
 }
@@ -340,6 +354,7 @@ struct cemout function cemStata(string scalar varlist, string scalar cutlist,
 
   struct cemout scalar out
   string vector cutpoints
+  touse = st_local("touse")
   real scalar L1
 
   varlist = tokens(varlist)
@@ -369,15 +384,15 @@ struct cemout function cemStata(string scalar varlist, string scalar cutlist,
   }
 
   
-  data = st_data(.,varlist)
+  data = st_data(.,varlist, touse)
 
   if (treat == "")
     treatment = .
   else
-    treatment = st_data(.,treat)
+    treatment = st_data(.,treat, touse)
 
   if (impvar != "") {
-    imps = st_data(.,impvar)
+    imps = st_data(.,impvar, touse)
     m = max(imps)
     data = select(data, imps :> 0)
     treatment = select(treatment, imps :> 0)
@@ -490,7 +505,7 @@ void function imbalance(string scalar varlist, string scalar breaks,
 
   groups = uniqrows(treat)
   if (length(groups) > 2) {
-    return()
+    return
   }
   
   idx1 = treat :== groups[1]
@@ -840,6 +855,22 @@ real matrix function table(transmorphic vector x, transmorphic vector y) {
   }
   return(mat)
 
+}
+
+real scalar function lookup(transmorphic scalar x, transmorphic vector tab) {
+  for (i = 1; i <= length(tab); i++) {
+    if (tab[i] == x) return(i)
+  }
+}
+
+// given a vector of 0's and 1's, return indices of the 1's, like selectindex() function added in Stata 13
+// if v = 0 (so can't tell if row or col vector), returns rowvector J(1, 0, 0) 
+real vector oneInds(real vector v) {
+    real colvector i, t; real matrix w
+    pragma unset i; pragma unset w
+    maxindex((cols(v)==1? v \ 0 : v, 0), 1, i, w)
+    t = rows(i)>length(v)? J(0, 1, 0) : i
+    return (cols(v)==1 & rows(v)!=1? t : t')
 }
 
 /* mata mlib create lcem, replace */
