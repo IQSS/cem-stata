@@ -304,7 +304,7 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
       (void) st_addvar("double","cem_weights")
       st_store(., "cem_weights", touse, wh)
       st_numscalar("r(n_matched)",sum(matched:==1))
-      st_numscalar("r(n_mstrata)",length(uniqrows(strata:*matched))-1)
+      st_numscalar("r(n_mstrata)",sum(uniqrows(strata:*matched):>0))
     }
   }
 }
