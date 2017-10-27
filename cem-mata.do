@@ -882,7 +882,3 @@ real vector oneInds(real vector v) {
 /* mata mlib index */
 
 end
-
-// Local Variables:
-// eval: (remove-hook 'before-save-hook 'cleanup-buffer-hook)
-// end:
