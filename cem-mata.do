@@ -639,7 +639,11 @@ void function combineMulticem(real matrix bigstrata, string scalar impvar, | rea
   st_numscalar("r(n_strata)", nstrata)
   if (_st_varindex("cem_strata")!=.)
     st_dropvar("cem_strata")
-  (void) st_addvar("int","cem_strata")
+  if (nstrata > 32700) {
+    (void) st_addvar("long","cem_strata")
+  } else {      
+    (void) st_addvar("int","cem_strata")
+  }
   st_store(., "cem_strata", bigstrata)
 
   if (args() == 3) {
