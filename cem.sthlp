@@ -119,6 +119,8 @@ Shimazaki-Shinomoto's rule. Note that cutpoints# only affects varname#.
 {it:treatment(varname)} sets the treatment variable used for matching. This is
 optional and if omitted, {cmd:cem} will simply sort the observations into 
 strata based on the coarsening and not return any output related to matching.
+Note that {cmd:cem} will use the highest value of this variable as the "treated"
+category. 
 
 {phang}
 {it:showcutpoints} will have {cmd:cem} display the cutpoints used for each variable

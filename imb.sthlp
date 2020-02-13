@@ -46,7 +46,9 @@ on this measure.
 {dlgtab:Options}
 
 {phang} 
-{it:treatment(varname)} sets the treatment variable used for the imbalance checks.
+{it:treatment(varname)} sets the treatment variable used for the imbalance
+checks. Note that {cmd:imb} will use the highest value of this variable as
+the "treated" category. 
 
 {phang} {it:breaks(string)} sets the default automatic coarsening
 algorithm. If either {cmd:cem} or {cmd:imb} has been run and there
