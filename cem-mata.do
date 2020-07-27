@@ -366,7 +366,10 @@ struct cemout function cemStata(string scalar varlist, string scalar cutlist,
   if (filename != "") {
     
     files = J(m,1,filename) + strofreal(1::m) + J(m,1,".dta")
-    stata("qui use "+files[1]+",replace")
+    stata("_getfilename `c(filename)'")
+    curr_file = st_global("r(filename)")
+    if (curr_file != files[1]) 
+      _error("current data must be first imputed dataset")
     n = st_nobs()
     for(i = 2;i <= m; i++) {
       stata("qui append using "+files[i])
@@ -382,8 +385,7 @@ struct cemout function cemStata(string scalar varlist, string scalar cutlist,
     st_local("impvar", "cem_imp")
     printf("Using MI files, ignoring impvar...")
   }
-
-  
+    
   data = st_data(.,varlist, touse)
 
   if (treat == "")
