@@ -28,11 +28,12 @@
 {synopt :{opt misets(integer)}}number of imputed datasets, if in separate files{p_end}
 {synopt :{opt impvar(string)}}name of imputed dataset variable, if in stack/flong format{p_end}
 {synopt :{opt noimb:al}}do not evaluate the imbalance in the matched solution.{p_end}
+{synopt :{opt base:line(real)}}value of the treatment variable to set as the baseline for the calculation of the weights.{p_end}
 
 {title:Description}
 
 {pstd} {cmd:cem} implements the Coarsened Exact Matching method
-described in Iacus, King, and Porro (2008). The main input for
+described in Iacus, King, and Porro (2012). The main input for
 {cmd:cem} are the variables to use and the cutpoints that define the
 coarsening. Users can either specify cutpoints for a variable or allow
 {cmd:cem} to automatically coarsen the data based on a binning
@@ -96,7 +97,10 @@ at a loss of information.  It is recommended that you simply use the output
 of value labels is used by {cmd:cem}. If you have an unordered variable, you may
 want to create dummy variables to use them in the matching process.
 
-{pstd}
+{pstd} For multilevel (and a binary) treatment variables, the {cmd:cem weights}
+are calulated with respect to the baseline category as set by the {cmd:baseline} option. Therefore, matched units with treatment variable equal to the baseline level receive weight 1, the others the usual cem weights. Unless specified,
+by default {cmd:baseline} is set to 1. If this level is not one of the possible values taken by the {cmd:treatment} variable, then the baseline is set to the first level of the {cmd:treatment} variable.
+
 
 {title:Arguments}
 
@@ -147,6 +151,8 @@ so on.
 {phang} {it:misets(integer)} is the number of imputed datasets being used for
 matching.
 
+{phang} {it:baseline(real)} is the value of the treatment variable used as the baseline for calculation of the {cmd:cem_weights}.
+
 {title:Output}
 
 {pstd} The following are added as variables to the main Stata dataset. If you
@@ -155,7 +161,7 @@ each of the .dta files.
 
 {synoptset 15 tabbed}{...}
 {synopt:{cmd:cem_strata}} the stratum that {cmd:cem} assigned each observation{p_end}
-{synopt:{cmd:cem_weights}} the weight assigned to the observation's stratum. Equals 0 if the observation is unmatched and 1 if the observation is treated.{p_end}
+{synopt:{cmd:cem_weights}} the weight assigned to the observation's stratum. Equals 0 if the observation is unmatched. If the observation is matched, the weights will be such that all treatment levels have the same strata distribution as the {cmd:baseline} treatment category in the matched data.{p_end}
 {synopt:{cmd:cem_matched}} indicator if the observation was matched.{p_end}
 {synopt:{cmd:cem_treat}} when using the multiple imputation features, {cmd:cem} outputs this variable, which is the treatment vector used for matching. {cmd:cem} applies the same combination rule to treatment as to strata.{p_end}
 
@@ -189,10 +195,9 @@ each of the .dta files.
 
 {pstd} For a full reference on Coarsened Exact Matching, see:
 
-{phang} Stefano M. Iacus, Gary King, and Giuseppe Porro, "Matching for Causal
-Inference Without Balance Checking", copy at
-<http://gking.harvard.edu/files/abs/cem-abs.shtml>
+{phang} Stefano M. Iacus, Gary King, and Giuseppe Porro, "Causal Inference Without Balance Checking: Coarsened Exact Matching", copy at
+<https://gking.harvard.edu/files/abs/cem-plus-abs.shtml>
 
 {pstd} To report bugs or give comments, please contact Matthew Blackwell
-<blackwel@fas.harvard.edu>.
+<mblackwell@gov.harvard.edu>.
 

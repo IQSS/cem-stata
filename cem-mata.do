@@ -13,7 +13,6 @@ mata:
 
 mata clear
 
-
 real scalar sturges(x) {
   classes = ceil((log10(rows(x))/log10(2))+1)
   return(classes)
@@ -176,10 +175,10 @@ struct cemout {
 }
 
 struct cemout cem(numeric matrix data, real colvector treatment,
-                  struct veclist vector cutpoints, string scalar impvar) {
+                  struct veclist vector cutpoints, string scalar impvar,
+                  real scalar baseline) {
 
   struct cemout scalar out
-
   n = rows(data)
   k = cols(data)
 
@@ -198,13 +197,14 @@ struct cemout cem(numeric matrix data, real colvector treatment,
   if (treatment==.)
     assignStrata(out.data, impvar)
   else
-    assignStrata(out.data, impvar, treatment)
+    assignStrata(out.data, impvar, treatment, baseline)
 
   return(out)
 }
 
 
-void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
+void assignStrata(real matrix x, string scalar impvar, | real vector treat,
+                  real scalar baseline) {
   n = rows(x)
   k = cols(x)
   touse = st_local("touse")
@@ -219,7 +219,7 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
   st = uniqrows(xx)
   nstrata = length(st)
 
-  if (args()==3) {
+  if (args() == 4) {
     groups = uniqrows(treat)
     ngroups = length(groups)
     gtable = J(nstrata,ngroups,0)
@@ -228,7 +228,7 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
 
   for (i = 1; i <= n; i++) {
     strata[i] = lookup(xx[i], st)
-    if (args() == 3) {
+    if (args() == 4) {
       thistreat = oneInds(treat[i] :== groups)
       gtable[strata[i],thistreat] = gtable[strata[i],thistreat] + 1
       if (min(gtable[strata[i],]) > 0) {
@@ -256,8 +256,8 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
   /*   } */
   /* } */
   if (impvar != "") {
-    if (args() == 3) {
-      combineMulticem(strata, impvar, treat)
+    if (args() == 4) {
+      combineMulticem(strata, impvar, treat, baseline)
     } else {
       combineMulticem(strata, impvar)
     }
@@ -275,7 +275,7 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
     st_numscalar("r(n_strata)", nstrata)
     
     
-    if (args()==3) {
+    if (args()==4) {
       if (_st_varindex("cem_matched")!=.)
         st_dropvar("cem_matched")
       (void) st_addvar("double","cem_matched")
@@ -294,10 +294,24 @@ void assignStrata(real matrix x, string scalar impvar, | real vector treat) {
       st_matrix("r(cem_sum)", cemsum)
       st_matrixrowstripe("r(cem_sum)", (J(3,1,""),("All"\ "Matched"\"Unmatched")))
       st_matrixcolstripe("r(cem_sum)",(J(ngroups,1,""),strofreal(groups)))
-      wh = gtable[,2]:/gtable[,1] :* sum(treat:==groups[1] :& matched :== 1)/
-        sum(treat:==groups[2] :& matched :== 1)
-      wh = wh[strata',] :* (matched:==1)
-      wh = wh :* (!(wh :> 0 :& treat:==1)) + (wh :> 0 :& treat:==1)
+    
+      wh = J(n, 1, 0)
+      bline = oneInds(groups :== baseline)
+      if (rows(bline) == 0) {
+        bline = 1
+        printf("\nBaseline not found in treatment varaiable, using %s as the baseline group for cem_weights", strofreal(groups[1]))
+      }       
+      for (i = 1; i <= n; i++) {
+        this_st = strata[i]
+        this_gr = select(1::ngroups, treat[i] :== groups)
+        wh[i] = gtable[this_st, bline] / gtable[this_st, this_gr]
+        wh[i] = wh[i] * (cemsum[2, this_gr] / cemsum[2, bline])
+        wh[i] = wh[i] * matched[i]
+      }
+     //  wh = gtable[,2]:/gtable[,1] :* sum(treat:==groups[1] :& matched :== 1)/
+     //   sum(treat:==groups[2] :& matched :== 1)
+     // wh = wh[strata',] :* (matched:==1)
+     // wh = wh :* (!(wh :> 0 :& treat:==1)) + (wh :> 0 :& treat:==1)
       wh = editmissing(wh, 0)
       if (_st_varindex("cem_weights")!=.)
         st_dropvar("cem_weights")
@@ -350,7 +364,8 @@ cutpoints = J(length(cutlist),1,veclist())
 struct cemout function cemStata(string scalar varlist, string scalar cutlist,
                        string scalar treat,
                        string scalar show, string scalar filename,
-                       real scalar m, string scalar impvar) {
+                       real scalar m, string scalar impvar,
+                       real scalar baseline) {
 
   struct cemout scalar out
   string vector cutpoints
@@ -410,7 +425,7 @@ struct cemout function cemStata(string scalar varlist, string scalar cutlist,
 
 
 
-  out = cem(data, treatment, cutpoints, impvar)
+  out = cem(data, treatment, cutpoints, impvar, baseline)
 
   /* here we post-process the imputed datasets */
   /* if (filename != "") { */
@@ -526,6 +541,8 @@ void function imbalance(string scalar varlist, string scalar breaks,
   st_matrixrowstripe("r(imbal)", (J(k,1,""),varlist'))
   st_matrixcolstripe("r(imbal)", (J(7,1,""),(
                                   "L1"\"mean"\"min"\"25%"\"50%"\"75%"\"max")))
+
+
 }
 
 real vector function wquant(real colvector x, real colvector weights,
@@ -562,30 +579,31 @@ real scalar function L1meas(real colvector treat, real matrix data,
     reddata[,i] = coarsen(reddata[,i],breakdance)
   }
 
-
   cells = uniqrows(reddata)
   L1 = 0
 
-  idx1 = treat2 :== groups[1]
-  idx2 = treat2 :== groups[2]
-
-  n1 = sum(idx1:*weights2)
-  n2 = sum(idx2:*weights2)
-
+  ngroups = length(groups)
+  wnorm = J(ngroups, 1, 0)
+  for (j = 1; j <= ngroups; j++) {
+    jind = treat2 :== groups[j]
+    wnorm[j] = sum(jind :* weights2)
+  }
+  gsums = J(ngroups, 1, 0)
   for (i = 1; i <= rows(cells); i++) {
     idx = rowsum(reddata :== cells[i,]):==cols(reddata)
-    jdx1 = (idx1:+idx) :== 2
-    jdx2 = (idx2:+idx) :== 2
-    m1 = sum(jdx1:*weights2)/n1
-    m2 = sum(jdx2:*weights2)/n2
-    L1 = L1 + abs(m1-m2)
+    for (j = 1; j <= ngroups; j++) {
+      jdx = ((treat2 :== groups[j]) :+ idx) :== 2
+      gsums[j] = sum(jdx :* weights2) / wnorm[j]
+    }
+    L1contrib = abs(max(gsums) - min(gsums))
+    L1 = L1 + L1contrib
   }
-  L1 = L1/2
+  L1 = L1 / ngroups
   return(L1)
 }
 
 
-void function combineMulticem(real matrix bigstrata, string scalar impvar, | real vector bigtreat) {
+void function combineMulticem(real matrix bigstrata, string scalar impvar, | real vector bigtreat, real scalar baseline) {
 
 
   imps = st_data(., impvar)
@@ -620,7 +638,7 @@ void function combineMulticem(real matrix bigstrata, string scalar impvar, | rea
     combstrata[i] = stchoices[1]/*stchoices[sample(1, 1::length(stchoices))]*/
     bigstrata[select(1::bign, ids :== i)] = J(max(imps), 1,combstrata[i])
 
-    if (args() == 3) {
+    if (args() == 4) {
       multitreat = select(bigtreat, ids:== i)
       trbins = uniqrows(multitreat)
       trcounts = J(length(trbins), 1, .)
@@ -648,7 +666,7 @@ void function combineMulticem(real matrix bigstrata, string scalar impvar, | rea
   }
   st_store(., "cem_strata", bigstrata)
 
-  if (args() == 3) {
+  if (args() == 4) {
     if (min(imps) == 0) {
       bigtreat = J(n, 1, .) \ bigtreat
     }
@@ -658,29 +676,13 @@ void function combineMulticem(real matrix bigstrata, string scalar impvar, | rea
     ngroups = length(groups)
     gtable = J(nstrata,ngroups,.)
     mstrata = J(n,1,0)
-    wh = J(n,1,0)
     for (i = 1; i <= nstrata; i++) {
       for (g = 1; g <= ngroups; g++) {
         gtable[i,g] = sum(combtreat :== groups[g] :& combstrata :== uniqrows(combstrata)[i])
       }
-      if (gtable[i,1] > 0)
-        wh = wh :+ ((gtable[i,2]/gtable[i,1]):*(combstrata:==uniqrows(combstrata)[i]))
-   
-      if (min(gtable[i,]) == 0)
+      if (min(gtable[i,]) > 0)
         mstrata = mstrata :+ (combstrata:==uniqrows(combstrata)[i])
     }
-
-    mstrata = 1:-mstrata
-
-    wh = wh :* sum(combtreat:==groups[1] :& mstrata :> 0)/
-                                    sum(combtreat:==groups[2] :& mstrata :> 0)
-
-    wh = wh :* (mstrata:>0)
-
-
-    wh = wh :* (!(wh :> 0 :& combtreat:==groups[2])) +
-               (wh :> 0 :& combtreat:==groups[2])
-    wh = editmissing(wh, 0)
 
     cemsum = J(3,ngroups,.)
 
@@ -689,6 +691,18 @@ void function combineMulticem(real matrix bigstrata, string scalar impvar, | rea
     cemsum[3,] = colsum(select(gtable,rowmin(gtable) :==0))
 
     nmstrata = colsum(rowmin(gtable) :> 0)
+    
+    wh = J(n, 1, 0)
+    bline = oneInds(groups :== baseline)
+    if (rows(bline) == 0) bline = 1      
+    for (i = 1; i <= n; i++) {
+      this_st = oneInds(combstrata[i] :== uniqrows(combstrata))
+      this_gr = oneInds(combtreat[i] :== groups)
+      wh[i] = gtable[this_st, bline] / gtable[this_st, this_gr]
+      wh[i] = wh[i] * (cemsum[2, this_gr] / cemsum[2, bline])
+      wh[i] = wh[i] * mstrata[i]
+    }
+    wh = editmissing(wh, 0)
 
     st_matrix("r(cem_sum)", cemsum)
     st_matrixrowstripe("r(cem_sum)", (J(3,1,""),("All"\ "Matched"\"Unmatched")))
@@ -760,6 +774,7 @@ void function k2k(string scalar varlist, string scalar trname,
   mtable = J(nstrata,ngroups,.)
 
   if (ngroups > 2) {
+    printf("\nNote: more than 2 treatment groups, k2k option ignored\n")
     return
   }
 

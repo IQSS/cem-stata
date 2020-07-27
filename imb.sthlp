@@ -33,9 +33,11 @@ covariates between treatment and control groups. A multivariate L1
 distance, univariate L1 distrances, difference in means and empirical
 quatiles difference are reported. The L1 measures are computed by 
 coarsening the data according to {cmd:breaks} and comparing across the
-multivariate histogram. See Iacus, King and Porro (2008) for more details 
+multivariate histogram. See Iacus, King and Porro (2011) for more details 
 on this measure.
- 
+
+{pstd} Note that the univariate measures of distance are only calculated when the treatment variables has two levels. 
+
 {title:Arguments}
 
 {dlgtab:Main}
@@ -95,10 +97,9 @@ identifying to which imputation the observation belongs.
 
 {pstd} For a full reference on Coarsened Exact Matching, see:
 
-{phang} Stefano M. Iacus, Gary King, and Giuseppe Porro, "Matching for Causal
-Inference Without Balance Checking", copy at
-<http://gking.harvard.edu/files/abs/cem-abs.shtml>
+{phang} Stefano M. Iacus, Gary King, and Giuseppe Porro, "Causal Inference Without Balance Checking: Coarsened Exact Matching", copy at
+<https://gking.harvard.edu/files/abs/cem-plus-abs.shtml>
 
 {pstd} To report bugs or give comments, please contact Matthew Blackwell
-<blackwel@fas.harvard.edu>.
+<mblackwell@gov.harvard.edu>.
 

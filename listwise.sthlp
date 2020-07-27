@@ -41,7 +41,7 @@ the varlist.
 
 {phang} Stefano M. Iacus, Gary King, and Giuseppe Porro, "Matching for Causal
 Inference Without Balance Checking", copy at
-<http://gking.harvard.edu/files/abs/cem-abs.shtml>
+<https://gking.harvard.edu/files/abs/cem-plus-abs.shtml>
 
 {pstd} To report bugs or give comments, please contact Matthew Blackwell
-<blackwel@fas.harvard.edu>.
+<mblackwell@gov.harvard.edu>.

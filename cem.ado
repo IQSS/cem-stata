@@ -14,7 +14,7 @@ version 10.1
 
 return local cem_call = "`0'"
 
-syntax anything(name=coarse id="variable list") [if] [, TReatment(varname) AUTOcuts(string) K2k SHowbreaks imbbreaks(string) miname(string) misets(real 0) NOIMBal IMPvar(varname)]
+syntax anything(name=coarse id="variable list") [if] [, TReatment(varname) AUTOcuts(string) K2k SHowbreaks imbbreaks(string) miname(string) misets(real 0) NOIMBal IMPvar(varname) BASEline(real 1)]
 
 marksample touse
 
@@ -52,8 +52,8 @@ while `more' > 0 {
         }
     }
 }
-
-mata: cem_out = cemStata("`varlist'","`varcuts'","`treatment'","`showbreaks'","`miname'", `misets', "`impvar'")
+ 
+mata: cem_out = cemStata("`varlist'","`varcuts'","`treatment'","`showbreaks'","`miname'", `misets', "`impvar'", `baseline')
 
 dis ""
 dis in green "Matching Summary:"
@@ -73,10 +73,11 @@ if ("`treatment'" != "") {
   if ("`noimbal'"=="") {
     mata: imbalance("`varlist'","`imbbreaks'","`treatment'",1,"`impvar'")
 
+    dis ""
+    dis in green "Multivariate L1 distance: " as res r(L1)
+    dis ""
+
     if (`r(n_groups)' == 2) {
-      dis ""
-      dis in green "Multivariate L1 distance: " as res r(L1)
-      dis ""
       dis in green "Univariate imbalance:"
       matrix list r(imbal), noheader format(%7.5g)
       return scalar L1 = r(L1)
@@ -85,9 +86,8 @@ if ("`treatment'" != "") {
     }
     else {
       dis ""
-      dis in green "NOTE: Treatment has must have only 2 levels to compute distance and weights. In addition, k2k cannot be used."
+      dis in green "More than 2 treatment groups, no univariate measures of imbalance will be calculated."
       dis ""
-      drop cem_weights
     }
   }
 
